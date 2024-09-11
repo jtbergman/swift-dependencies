@@ -373,9 +373,23 @@ public final class CachedValues: @unchecked Sendable {
     }
   }
 
-  private let lock = NSRecursiveLock()
-  public var cached = [CacheKey: any Sendable]()
-
+  private let lock = NSCondition()
+  public var cached = [CacheKey: CacheState]()
+  
+  public enum CacheState {
+    case loading
+    case loaded(any Sendable)
+    
+    var isLoading: Bool {
+      switch self {
+      case .loading:
+        return true
+      case .loaded:
+        return false
+      }
+    }
+  }
+  
   func value<Key: TestDependencyKey>(
     for key: Key.Type,
     context: DependencyContext,
@@ -388,12 +402,26 @@ public final class CachedValues: @unchecked Sendable {
     return withIssueContext(fileID: fileID, filePath: filePath, line: line, column: column) {
       let cacheKey = CacheKey(id: TypeIdentifier(key), context: context)
       
+      // If the dependency is loading, then other access to the same dependency should wait.
+      // If the dependency is loaded, or the dependency is not initialized, proceed immediately.
       lock.lock()
-      let base = cached[cacheKey]
-      lock.unlock()
+//      print("JT: Locking on \(Thread.current)")
+      while let base = cached[cacheKey], base.isLoading {
+//        print("JT: Waiting on \(Thread.current)")
+        lock.wait()
+      }
       
-      guard let base, let value = base as? Key.Value
+      guard case .loaded(let base) = cached[cacheKey], let value = base as? Key.Value
       else {
+        if !DependencyValues.isSetting {
+          // Mark as loading and release the lock while initializing. Any other accessors will
+          // automatically wait.
+          cached[cacheKey] = .loading
+          lock.broadcast()
+        }
+        lock.unlock()
+//        print("JT: Loading and unlocking \(Thread.current)")
+        
         let value: Key.Value?
         switch context {
         case .live:
@@ -467,18 +495,24 @@ public final class CachedValues: @unchecked Sendable {
           let value = Key.testValue
           if !DependencyValues.isSetting {
             lock.lock()
-            cached[cacheKey] = value
-            lock.unlock()
+            cached[cacheKey] = .loaded(value)
+            lock.broadcast()
+//            print("JT: Loaded and unlocking 1 \(Thread.current)")
           }
           return value
         }
 
         lock.lock()
-        cached[cacheKey] = value
+        cached[cacheKey] = .loaded(value)
+        lock.broadcast()
         lock.unlock()
+//        print("JT: Loaded and unlocking 2 \(Thread.current)")
         return value
       }
 
+      lock.broadcast()
+      lock.unlock()
+//      print("JT: No contest \(Thread.current)")
       return value
     }
   }

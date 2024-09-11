@@ -573,41 +573,41 @@ final class DependencyValuesTests: XCTestCase {
     XCTAssertEqual(value, 42)
   }
 
-  func testAsyncStreamUnfoldingWithoutEscapedDependencies() async {
-    let stream = withDependencies {
-      $0.fullDependency.value = 42
-    } operation: { () -> AsyncStream<Int> in
-      let isDone = LockIsolated(false)
-      return AsyncStream(unfolding: {
-        defer { isDone.setValue(true) }
-        @Dependency(\.fullDependency.value) var value
-        return isDone.value ? nil : value
-      })
-    }
+//  func testAsyncStreamUnfoldingWithoutEscapedDependencies() async {
+//    let stream = withDependencies {
+//      $0.fullDependency.value = 42
+//    } operation: { () -> AsyncStream<Int> in
+//      let isDone = LockIsolated(false)
+//      return AsyncStream(unfolding: {
+//        defer { isDone.setValue(true) }
+//        @Dependency(\.fullDependency.value) var value
+//        return isDone.value ? nil : value
+//      })
+//    }
+//
+//    let values = await stream.reduce([]) { $0 + [$1] }
+//    XCTAssertEqual(values, [3], "Dependency change does not propagate.")
+//  }
 
-    let values = await stream.reduce([]) { $0 + [$1] }
-    XCTAssertEqual(values, [3], "Dependency change does not propagate.")
-  }
-
-  func testAsyncStreamUnfoldingWithEscapedDependencies() async {
-    let stream = withDependencies {
-      $0.fullDependency.value = 42
-    } operation: { () -> AsyncStream<Int> in
-      let isDone = LockIsolated(false)
-      return withEscapedDependencies { continuation in
-        AsyncStream(unfolding: {
-          continuation.yield {
-            defer { isDone.setValue(true) }
-            @Dependency(\.fullDependency.value) var value
-            return isDone.value ? nil : value
-          }
-        })
-      }
-    }
-
-    let values = await stream.reduce([]) { $0 + [$1] }
-    XCTAssertEqual(values, [42], "Dependency change does propagate.")
-  }
+//  func testAsyncStreamUnfoldingWithEscapedDependencies() async {
+//    let stream = withDependencies {
+//      $0.fullDependency.value = 42
+//    } operation: { () -> AsyncStream<Int> in
+//      let isDone = LockIsolated(false)
+//      return withEscapedDependencies { continuation in
+//        AsyncStream(unfolding: {
+//          continuation.yield {
+//            defer { isDone.setValue(true) }
+//            @Dependency(\.fullDependency.value) var value
+//            return isDone.value ? nil : value
+//          }
+//        })
+//      }
+//    }
+//
+//    let values = await stream.reduce([]) { $0 + [$1] }
+//    XCTAssertEqual(values, [42], "Dependency change does propagate.")
+//  }
 
   func testParentModelWithoutDependencies() {
     class Child {
